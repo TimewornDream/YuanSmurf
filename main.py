@@ -1,7 +1,9 @@
 import subprocess
 import os
 import time
+from paddleocr import PaddleOCR, draw_ocr
 
+from PIL import Image
 
 def get_connected_devices():
     """获取所有连接的设备 ID"""
@@ -28,6 +30,7 @@ def take_screenshot(device_id=None):
     timestamp = int(time.time())
     filename = f"{timestamp}.png"
     filepath = os.path.join(screenshot_dir, filename)
+    filepath = os.path.join(screenshot_dir, filename)
 
     if device_id is None:
         devices = get_connected_devices()
@@ -44,22 +47,40 @@ def take_screenshot(device_id=None):
         subprocess.run(["adb", "-s", device_id, "pull", "/sdcard/screenshot.png", filepath], check=True)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"拉取截图失败: {e.stderr}")
+    return cut_screen_shot(filepath, 300, 400, 450, 240)
 
-    print(f"截图已保存到 {filepath}")
+
+def cut_screen_shot(filepath, x, y, width, height):
+    image = Image.open(filepath)
+    cropped_image = image.crop((x, y, x + width, y + height))
+    cropped_image.save(filepath)
+    print(f"截图已裁剪并保存到 {filepath}")
     return filepath
 
 
+def scan_question(ocr, filepath):
+    result = ocr.ocr(filepath, cls=True)
+    integers = []
+    for item in result:
+        if isinstance(item, list) and len(item) >= 2 and isinstance(item[-1], tuple):
+            char = item[-1][0]
+            if char.isdigit():
+                integers.append(int(char))
+    return integers
+
 def main():
+    filepath = ""
     ip_address = "127.0.0.1"
     port = "5575"
 
     connect_device(ip_address, port)
+    ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=True, det_model_dir=os.environ["DET_MODEL_DIR"])
 
     try:
-        take_screenshot()
+        filepath = take_screenshot()
     except Exception as e:
         print(f"发生错误: {str(e)}")
-
+    question = scan_question(ocr, filepath)
 
 if __name__ == "__main__":
     main()
